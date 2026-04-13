@@ -57,7 +57,12 @@ func FormatTelegramHTML(markdown string) string {
 			} else {
 				buf.WriteString("</b>\n")
 				if node.NextSibling() != nil {
-					buf.WriteString("\n")
+					// Only add blank line before another heading or blockquote,
+					// not before lists or paragraphs (keep headings tight with their content)
+					switch node.NextSibling().(type) {
+					case *ast.Heading, *ast.Blockquote, *ast.ThematicBreak:
+						buf.WriteString("\n")
+					}
 				}
 			}
 

@@ -310,7 +310,7 @@ func TestFormatTelegramHTML(t *testing.T) {
 				"}\n" +
 				"```\n\n" +
 				"Finally, check `config.Get(\"timeout\") > 0 && config.Get(\"retries\") < 10` before deploying.",
-			expected: "<b>API Migration Guide</b>\n\n" +
+			expected: "<b>API Migration Guide</b>\n" +
 				"Here's what changed in v2 &amp; why you should care about &lt;breaking&gt; changes:\n\n" +
 				"1. The <code>Config</code> struct now uses <code>map[string]any</code> instead of <code>map[string]interface{}</code>\n" +
 				"2. <b>All</b> handlers must return <code>(T, error)</code> where <code>T</code> satisfies <code>fmt.Stringer</code>\n" +
