@@ -10,6 +10,7 @@ import (
 type OutboxEntry struct {
 	Path    string `json:"path"`
 	Caption string `json:"caption,omitempty"`
+	Type    string `json:"type,omitempty"` // "voice" sends as voice note; default sends as document
 }
 
 func ReadOutbox(path string) ([]OutboxEntry, error) {

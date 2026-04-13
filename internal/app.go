@@ -269,9 +269,7 @@ func (a *App) runAgentWithFeedback(ctx context.Context, input models.AgentInput)
 		}
 	}
 
-	if output.Result != "" {
-		a.sendAgentOutput(input.ChatID, input.ThreadID, output.Result)
-	}
+	a.sendAgentOutput(input.ChatID, input.ThreadID, output.Result)
 
 	return output, err
 }
@@ -295,13 +293,21 @@ func (a *App) sendAgentOutput(chatID, threadID int64, result string) {
 			log.Printf("[outbox] chat=%d skipping %s: %v", chatID, entry.Path, err)
 			continue
 		}
-		if err := a.bot.SendFile(chatID, threadID, entry.Path, FormatTelegramHTML(entry.Caption)); err != nil {
-			log.Printf("[outbox] chat=%d failed to send %s: %v", chatID, entry.Path, err)
+		var sendErr error
+		if entry.Type == "voice" {
+			sendErr = a.bot.SendVoice(chatID, threadID, entry.Path, FormatTelegramHTML(entry.Caption))
+		} else {
+			sendErr = a.bot.SendFile(chatID, threadID, entry.Path, FormatTelegramHTML(entry.Caption))
+		}
+		if sendErr != nil {
+			log.Printf("[outbox] chat=%d failed to send %s: %v", chatID, entry.Path, sendErr)
 		}
 	}
 
-	if err := a.bot.SendMessage(chatID, threadID, FormatTelegramHTML(result)); err != nil {
-		log.Printf("error sending message to chat %d: %v", chatID, err)
+	if result != "" {
+		if err := a.bot.SendMessage(chatID, threadID, FormatTelegramHTML(result)); err != nil {
+			log.Printf("error sending message to chat %d: %v", chatID, err)
+		}
 	}
 }
 

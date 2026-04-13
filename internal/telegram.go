@@ -389,6 +389,31 @@ func (tb *TelegramBot) SendFile(chatID, threadID int64, filePath string, caption
 	return nil
 }
 
+func (tb *TelegramBot) SendVoice(chatID, threadID int64, filePath string, caption string) error {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("opening file %s: %w", filePath, err)
+	}
+	defer f.Close()
+
+	fileName := filepath.Base(filePath)
+	opts := &gotgbot.SendVoiceOpts{}
+	if caption != "" {
+		opts.Caption = caption
+		opts.ParseMode = "HTML"
+	}
+	if threadID > 0 {
+		opts.MessageThreadId = threadID
+	}
+
+	_, err = tb.bot.SendVoice(chatID, gotgbot.InputFileByReader(fileName, f), opts)
+	if err != nil {
+		return fmt.Errorf("sending voice %s: %w", fileName, err)
+	}
+	log.Printf("[send] chat=%d voice=%s", chatID, fileName)
+	return nil
+}
+
 func (tb *TelegramBot) SendMessage(chatID, threadID int64, text string) error {
 	if text == "" {
 		return nil
