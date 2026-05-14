@@ -196,12 +196,31 @@ func TestFormatTelegramHTML(t *testing.T) {
 		{
 			name:  "basic table",
 			input: "| Name | Age |\n|------|-----|\n| Alice | 30 |\n| Bob | 25 |",
-			expected: "<pre>" +
-				"Name  | Age\n" +
-				"------+----\n" +
-				"Alice | 30\n" +
-				"Bob   | 25" +
-				"</pre>",
+			expected: "───\n" +
+				"<b>Name</b>: Alice\n" +
+				"<b>Age</b>: 30\n" +
+				"───\n" +
+				"<b>Name</b>: Bob\n" +
+				"<b>Age</b>: 25\n" +
+				"───",
+		},
+		{
+			name: "table with inline markdown in cells",
+			input: "| Feature | Note |\n" +
+				"|---------|------|\n" +
+				"| **bold** | `code` |\n" +
+				"| *italic* | [link](https://example.com) |\n" +
+				"| ~~strike~~ | plain |",
+			expected: "───\n" +
+				"<b>Feature</b>: <b>bold</b>\n" +
+				"<b>Note</b>: <code>code</code>\n" +
+				"───\n" +
+				"<b>Feature</b>: <i>italic</i>\n" +
+				`<b>Note</b>: <a href="https://example.com">link</a>` + "\n" +
+				"───\n" +
+				"<b>Feature</b>: <s>strike</s>\n" +
+				"<b>Note</b>: plain\n" +
+				"───",
 		},
 
 		// === Escaping ===
@@ -332,13 +351,19 @@ func TestFormatTelegramHTML(t *testing.T) {
 				"✅ Replace <code>interface{}</code> with <code>any</code>\n" +
 				"⬜ Test with <code>go test -race ./...</code>\n\n" +
 				"———\n\n" +
-				"<pre>" +
-				"Symbol | HTML Entity | Description\n" +
-				"-------+-------------+-------------\n" +
-				"&lt;      | &amp;lt;        | less than\n" +
-				"&gt;      | &amp;gt;        | greater than\n" +
-				"&amp;      | &amp;amp;       | ampersand" +
-				"</pre>\n\n" +
+				"───\n" +
+				"<b>Symbol</b>: &lt;\n" +
+				"<b>HTML Entity</b>: &amp;lt;\n" +
+				"<b>Description</b>: less than\n" +
+				"───\n" +
+				"<b>Symbol</b>: &gt;\n" +
+				"<b>HTML Entity</b>: &amp;gt;\n" +
+				"<b>Description</b>: greater than\n" +
+				"───\n" +
+				"<b>Symbol</b>: &amp;\n" +
+				"<b>HTML Entity</b>: &amp;amp;\n" +
+				"<b>Description</b>: ampersand\n" +
+				"───\n\n" +
 				"<pre><code class=\"language-go\">" +
 				"func Handle[T fmt.Stringer](ctx *RequestCtx, fn func() (T, error)) {\n" +
 				"    result, err := fn()\n" +

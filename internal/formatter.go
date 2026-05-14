@@ -391,72 +391,92 @@ func extractText(n ast.Node, source []byte) string {
 }
 
 func renderTable(buf *strings.Builder, table *extast.Table, source []byte) {
-	// Collect all rows (header + body)
-	var rows [][]string
+	var rows []ast.Node
 	for row := table.FirstChild(); row != nil; row = row.NextSibling() {
-		var cells []string
-		for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
-			cells = append(cells, extractText(cell, source))
-		}
-		rows = append(rows, cells)
+		rows = append(rows, row)
 	}
 
-	if len(rows) == 0 {
+	if len(rows) < 2 {
 		return
 	}
 
-	// Find max columns
-	maxCols := 0
-	for _, row := range rows {
-		if len(row) > maxCols {
-			maxCols = len(row)
-		}
+	const sep = "───"
+
+	var headers []ast.Node
+	for cell := rows[0].FirstChild(); cell != nil; cell = cell.NextSibling() {
+		headers = append(headers, cell)
 	}
 
-	// Compute column widths (rune count)
-	colWidths := make([]int, maxCols)
-	for _, row := range rows {
-		for i, cell := range row {
-			w := len([]rune(cell))
-			if w > colWidths[i] {
-				colWidths[i] = w
-			}
+	buf.WriteString(sep)
+	buf.WriteString("\n")
+	for _, row := range rows[1:] {
+		var cells []ast.Node
+		for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
+			cells = append(cells, cell)
 		}
-	}
-
-	buf.WriteString("<pre>")
-	for i, row := range rows {
-		for j := 0; j < maxCols; j++ {
-			cell := ""
-			if j < len(row) {
-				cell = row[j]
+		for i, header := range headers {
+			buf.WriteString("<b>")
+			renderCellInline(buf, header, source)
+			buf.WriteString("</b>: ")
+			if i < len(cells) {
+				renderCellInline(buf, cells[i], source)
 			}
-			if j > 0 {
-				buf.WriteString(" | ")
-			}
-			// Don't pad the last column
-			if j < maxCols-1 {
-				padded := cell + strings.Repeat(" ", colWidths[j]-len([]rune(cell)))
-				buf.WriteString(escapeHTML(padded))
-			} else {
-				buf.WriteString(escapeHTML(cell))
-			}
-		}
-		if i < len(rows)-1 {
 			buf.WriteString("\n")
 		}
-		// Add separator after header
-		if i == 0 {
-			for j := 0; j < maxCols; j++ {
-				if j > 0 {
-					buf.WriteString("-+-")
-				}
-				buf.WriteString(strings.Repeat("-", colWidths[j]))
-			}
-			if 1 < len(rows)-1 {
-				buf.WriteString("\n")
-			}
+		buf.WriteString(sep)
+		buf.WriteString("\n")
+	}
+}
+
+// renderCellInline writes the inline children of a table cell, preserving
+// inline markdown formatting (bold, italic, code, strikethrough, links).
+func renderCellInline(buf *strings.Builder, cell ast.Node, source []byte) {
+	for child := cell.FirstChild(); child != nil; child = child.NextSibling() {
+		renderInlineNode(buf, child, source)
+	}
+}
+
+func renderInlineNode(buf *strings.Builder, n ast.Node, source []byte) {
+	switch node := n.(type) {
+	case *ast.Text:
+		buf.WriteString(escapeHTML(string(node.Segment.Value(source))))
+	case *ast.String:
+		buf.WriteString(escapeHTML(string(node.Value)))
+	case *ast.CodeSpan:
+		buf.WriteString("<code>")
+		renderCellInline(buf, node, source)
+		buf.WriteString("</code>")
+	case *ast.Emphasis:
+		open, close := "<i>", "</i>"
+		if node.Level == 2 {
+			open, close = "<b>", "</b>"
+		}
+		buf.WriteString(open)
+		renderCellInline(buf, node, source)
+		buf.WriteString(close)
+	case *extast.Strikethrough:
+		buf.WriteString("<s>")
+		renderCellInline(buf, node, source)
+		buf.WriteString("</s>")
+	case *ast.Link:
+		fmt.Fprintf(buf, `<a href="%s">`, escapeHTML(string(node.Destination)))
+		renderCellInline(buf, node, source)
+		buf.WriteString("</a>")
+	case *ast.AutoLink:
+		url := string(node.URL(source))
+		label := string(node.Label(source))
+		fmt.Fprintf(buf, `<a href="%s">%s</a>`, escapeHTML(url), escapeHTML(label))
+	case *ast.Image:
+		dest := string(node.Destination)
+		alt := extractText(node, source)
+		if alt == "" {
+			alt = dest
+		}
+		fmt.Fprintf(buf, `<a href="%s">%s</a>`, escapeHTML(dest), escapeHTML(alt))
+	case *ast.RawHTML:
+		for i := range node.Segments.Len() {
+			seg := node.Segments.At(i)
+			buf.WriteString(escapeHTML(string(seg.Value(source))))
 		}
 	}
-	buf.WriteString("</pre>\n")
 }
