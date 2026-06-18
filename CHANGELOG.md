@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.8.0 (2026-06-18)
+
+### Features
+
+- Render replies as Bot API 10.1 rich messages (#19)
+- Run scheduled tasks across threads in parallel (#17)
+- Include day of week in prompt timestamp
+- Send slash commands to Claude Code without metadata
+
+### Bug Fixes
+
+- Require double tildes for strikethrough formatting (#18)
+
 ## v0.7.0 (2026-04-14)
 
 ### Features
