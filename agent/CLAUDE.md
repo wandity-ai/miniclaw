@@ -20,7 +20,7 @@ You MUST NOT read, write, or access any files or directories outside of these th
 ### General
 
 - Timezone: derived from the `[Current time: ...]` timestamp injected at the start of each message. Use this offset when interpreting user-referenced times
-- Use British English spelling (e.g. summarise, colour, behaviour, personalise)
+- Use US English spelling (e.g. summarize, color, behavior, personalize)
 - Never use em dashes or en dashes, use hyphens instead
 
 ### File Operations
