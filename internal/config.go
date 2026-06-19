@@ -22,12 +22,14 @@ type Config struct {
 }
 
 func HomeDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		log.Fatalf("cannot resolve home directory: %v", err)
+	dir := os.Getenv("MINICLAW_HOME")
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			log.Fatalf("cannot resolve home directory: %v", err)
+		}
+		dir = filepath.Join(home, ".miniclaw")
 	}
-
-	dir := filepath.Join(home, ".miniclaw")
 	for _, sub := range []string{"", "data", "data/tasks", "data/prompts", "workspace"} {
 		p := filepath.Join(dir, sub)
 		if err := os.MkdirAll(p, 0755); err != nil {

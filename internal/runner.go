@@ -65,7 +65,7 @@ type streamContent struct {
 	Input map[string]any `json:"input"`
 }
 
-func (r *AgentRunner) Run(ctx context.Context, input models.AgentInput, effort string, onToolUse func(toolName, label string), onText func(text string)) (models.AgentOutput, error) {
+func (r *AgentRunner) Run(ctx context.Context, input models.AgentInput, effort string, model string, sessionTTL time.Duration, onToolUse func(toolName, label string), onText func(text string)) (models.AgentOutput, error) {
 	prompt := r.buildPrompt(input)
 
 	args := []string{
@@ -77,17 +77,20 @@ func (r *AgentRunner) Run(ctx context.Context, input models.AgentInput, effort s
 	if effort != EffortDefault {
 		args = append(args, "--effort", effort)
 	}
+	if model != "" {
+		args = append(args, "--model", model)
+	}
 	if threadPrompt := r.loadThreadPrompt(input.ChatID, input.ThreadID); threadPrompt != "" {
 		args = append(args, "--append-system-prompt", threadPrompt)
 	}
 
 	if input.IsolatedSession {
 		log.Printf("[agent] chat=%d thread=%d starting isolated session", input.ChatID, input.ThreadID)
-	} else if sessionID := r.sessions.Get(input.ChatID, input.ThreadID); sessionID != "" {
+	} else if sessionID := r.sessions.GetFresh(input.ChatID, input.ThreadID, sessionTTL); sessionID != "" {
 		log.Printf("[agent] chat=%d thread=%d resuming session=%s", input.ChatID, input.ThreadID, sessionID)
 		args = append(args, "--resume", sessionID)
 	} else {
-		log.Printf("[agent] chat=%d thread=%d starting new session", input.ChatID, input.ThreadID)
+		log.Printf("[agent] chat=%d thread=%d starting new session (previous expired or absent)", input.ChatID, input.ThreadID)
 	}
 
 	cmd := exec.CommandContext(ctx, "claude", args...)
@@ -168,6 +171,7 @@ func (r *AgentRunner) Run(ctx context.Context, input models.AgentInput, effort s
 
 	if resultSessionID != "" && !input.IsolatedSession {
 		r.sessions.SetIfAbsent(input.ChatID, input.ThreadID, resultSessionID)
+		r.sessions.Touch(input.ChatID, input.ThreadID)
 	}
 
 	log.Printf("[agent] chat=%d thread=%d completed session=%s result_len=%d", input.ChatID, input.ThreadID, resultSessionID, len(result))

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const (
@@ -21,9 +22,29 @@ const (
 	EffortMax     = "max"
 )
 
+const DefaultSessionTTL = 2 * time.Hour
+
 type Settings struct {
 	StatusLevel string `json:"statusLevel,omitempty"`
 	Effort      string `json:"effort,omitempty"`
+	Model       string `json:"model,omitempty"` // e.g. "claude-opus-4-8"
+	SessionTTL  string `json:"sessionTTL,omitempty"` // e.g. "24h", "0" to disable
+}
+
+// ParseSessionTTL returns the session TTL as a duration. Zero disables expiry.
+func (s Settings) ParseSessionTTL() time.Duration {
+	if s.SessionTTL == "" {
+		return DefaultSessionTTL
+	}
+	if s.SessionTTL == "0" {
+		return 0
+	}
+	d, err := time.ParseDuration(s.SessionTTL)
+	if err != nil {
+		log.Printf("invalid sessionTTL %q, using default %v", s.SessionTTL, DefaultSessionTTL)
+		return DefaultSessionTTL
+	}
+	return d
 }
 
 func LoadSettings(dataDir string) Settings {

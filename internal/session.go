@@ -7,16 +7,18 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"miniclaw/internal/models"
 )
 
 type SessionData struct {
-	SessionID     string  `json:"sessionID"`
-	ContextTokens int     `json:"contextTokens,omitempty"`
-	ContextWindow int     `json:"contextWindow,omitempty"`
-	CostUSD       float64 `json:"costUSD,omitempty"`
-	LastCostUSD   float64 `json:"lastCostUSD,omitempty"`
+	SessionID     string     `json:"sessionID"`
+	LastActivity  *time.Time `json:"lastActivity,omitempty"`
+	ContextTokens int        `json:"contextTokens,omitempty"`
+	ContextWindow int        `json:"contextWindow,omitempty"`
+	CostUSD       float64    `json:"costUSD,omitempty"`
+	LastCostUSD   float64    `json:"lastCostUSD,omitempty"`
 }
 
 // All reads and writes go directly to disk; the mutex serialises Go-side access only.
@@ -39,12 +41,38 @@ func sessionKey(chatID, threadID int64) string {
 	return fmt.Sprintf("%d:%d", chatID, threadID)
 }
 
-func (s *SessionStore) Get(chatID, threadID int64) string {
+// GetFresh returns the session ID only if it was active within the given TTL.
+// A zero TTL disables expiry (always returns the session).
+func (s *SessionStore) GetFresh(chatID, threadID int64, ttl time.Duration) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	sessions := s.load()
-	return sessions[sessionKey(chatID, threadID)].SessionID
+	entry := sessions[sessionKey(chatID, threadID)]
+	if entry.SessionID == "" {
+		return ""
+	}
+	if ttl > 0 && entry.LastActivity != nil && time.Since(*entry.LastActivity) > ttl {
+		return ""
+	}
+	return entry.SessionID
+}
+
+// Touch updates the last activity timestamp for a session.
+func (s *SessionStore) Touch(chatID, threadID int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sessions := s.load()
+	key := sessionKey(chatID, threadID)
+	entry := sessions[key]
+	if entry.SessionID == "" {
+		return
+	}
+	now := time.Now()
+	entry.LastActivity = &now
+	sessions[key] = entry
+	s.save(sessions)
 }
 
 // SetIfAbsent writes the session ID only if no session exists for this key yet.
@@ -61,6 +89,8 @@ func (s *SessionStore) SetIfAbsent(chatID, threadID int64, sessionID string) {
 	}
 	entry := sessions[key]
 	entry.SessionID = sessionID
+	now := time.Now()
+	entry.LastActivity = &now
 	sessions[key] = entry
 	s.save(sessions)
 }

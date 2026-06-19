@@ -35,6 +35,8 @@ type App struct {
 	outboxMu    sync.Mutex
 	statusLevel atomic.Value
 	effortLevel atomic.Value
+	model       atomic.Value
+	sessionTTL  atomic.Value // time.Duration
 }
 
 func NewApp(cfg Config) *App {
@@ -46,6 +48,8 @@ func NewApp(cfg Config) *App {
 	settings := LoadSettings(cfg.DataDir)
 	a.statusLevel.Store(settings.StatusLevel)
 	a.effortLevel.Store(settings.Effort)
+	a.model.Store(settings.Model)
+	a.sessionTTL.Store(settings.ParseSessionTTL())
 
 	bot, err := NewTelegramBot(cfg.TelegramToken, filepath.Join(cfg.WorkspaceDir, "files"), a.onMessage)
 	if err != nil {
@@ -216,7 +220,9 @@ func (a *App) runAgentWithFeedback(ctx context.Context, input models.AgentInput)
 	}
 
 	effort := a.effortLevel.Load().(string)
-	output, err := a.agentRunner.Run(ctx, input, effort, toolCallback, textCallback)
+	model := a.model.Load().(string)
+	sessionTTL := a.sessionTTL.Load().(time.Duration)
+	output, err := a.agentRunner.Run(ctx, input, effort, model, sessionTTL, toolCallback, textCallback)
 	if output.ModelUsage != nil {
 		a.sessions.UpdateUsage(input.ChatID, input.ThreadID, output.ModelUsage, input.IsolatedSession)
 	}

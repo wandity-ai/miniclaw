@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"miniclaw/internal/models"
 )
@@ -19,7 +20,7 @@ func TestSessionStore_GetSet(t *testing.T) {
 	s := newTestSessionStore(t)
 
 	s.SetIfAbsent(100, 0, "sess-abc")
-	if got := s.Get(100, 0); got != "sess-abc" {
+	if got := s.GetFresh(100, 0, 0); got != "sess-abc" {
 		t.Errorf("Get = %q, want %q", got, "sess-abc")
 	}
 }
@@ -29,7 +30,7 @@ func TestSessionStore_SetIfAbsent_NoOverwrite(t *testing.T) {
 
 	s.SetIfAbsent(100, 0, "first")
 	s.SetIfAbsent(100, 0, "second")
-	if got := s.Get(100, 0); got != "first" {
+	if got := s.GetFresh(100, 0, 0); got != "first" {
 		t.Errorf("Get = %q, want %q (should not overwrite)", got, "first")
 	}
 }
@@ -192,7 +193,7 @@ func TestSessionStore_Clear(t *testing.T) {
 
 	// Next SetIfAbsent should work since SessionID was cleared
 	s.SetIfAbsent(100, 200, "sess-2")
-	if got := s.Get(100, 200); got != "sess-2" {
+	if got := s.GetFresh(100, 200, 0); got != "sess-2" {
 		t.Errorf("Get after clear = %q, want %q", got, "sess-2")
 	}
 }
@@ -211,10 +212,10 @@ func TestSessionStore_BackwardCompat(t *testing.T) {
 
 	s := NewSessionStore(path)
 
-	if got := s.Get(100, 0); got != "sess-abc" {
+	if got := s.GetFresh(100, 0, 0); got != "sess-abc" {
 		t.Errorf("Get(100,0) = %q, want %q", got, "sess-abc")
 	}
-	if got := s.Get(200, 300); got != "sess-xyz" {
+	if got := s.GetFresh(200, 300, 0); got != "sess-xyz" {
 		t.Errorf("Get(200,300) = %q, want %q", got, "sess-xyz")
 	}
 
@@ -234,7 +235,46 @@ func TestSessionStore_BackwardCompat(t *testing.T) {
 	}
 
 	// Other entry should also survive the migration
-	if got := s2.Get(200, 300); got != "sess-xyz" {
+	if got := s2.GetFresh(200, 300, 0); got != "sess-xyz" {
 		t.Errorf("Get(200,300) after migration = %q, want %q", got, "sess-xyz")
+	}
+}
+
+func TestSessionStore_GetFresh_Expiry(t *testing.T) {
+	s := newTestSessionStore(t)
+
+	s.SetIfAbsent(100, 0, "sess-fresh")
+
+	// With zero TTL (disabled), always returns the session
+	if got := s.GetFresh(100, 0, 0); got != "sess-fresh" {
+		t.Errorf("GetFresh(ttl=0) = %q, want %q", got, "sess-fresh")
+	}
+
+	// With a large TTL, session is still fresh
+	if got := s.GetFresh(100, 0, 24*time.Hour); got != "sess-fresh" {
+		t.Errorf("GetFresh(ttl=24h) = %q, want %q", got, "sess-fresh")
+	}
+
+	// Backdate LastActivity to simulate a stale session
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		sessions := s.load()
+		entry := sessions["100"]
+		old := time.Now().Add(-25 * time.Hour)
+		entry.LastActivity = &old
+		sessions["100"] = entry
+		s.save(sessions)
+	}()
+
+	// Now the session should be expired
+	if got := s.GetFresh(100, 0, 24*time.Hour); got != "" {
+		t.Errorf("GetFresh(stale) = %q, want empty", got)
+	}
+
+	// Touch should refresh it
+	s.Touch(100, 0)
+	if got := s.GetFresh(100, 0, 24*time.Hour); got != "sess-fresh" {
+		t.Errorf("GetFresh(after touch) = %q, want %q", got, "sess-fresh")
 	}
 }
