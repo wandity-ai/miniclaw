@@ -8,6 +8,8 @@ allowed-tools: "Bash(curl *), Bash(/home/openclaw/.local/bin/edge-tts *), Bash(f
 
 Transcribe a voice or audio file using the Groq Whisper API, then respond with a voice note followed by a separate text message.
 
+This skill is shared by all miniclaw instances (Cleo, Tim, etc.). It is agent-agnostic: every path uses the `$MINICLAW_HOME` environment variable, and the reply voice is read from that instance's own config. Never hardcode a specific instance's home directory.
+
 ## Step 1: Identify the audio file
 
 Find the audio file path from the conversation context. It will be in a `[File attached: ...]` or `[Replied-to message has file attached: ...]` line. If no audio file is present, tell the user.
@@ -39,33 +41,41 @@ Treat the transcribed text as if the user had typed it as a normal text message.
 First, write your full response text to a file (use the Write tool) at:
 
 ```
-/home/openclaw/.miniclaw-tim/workspace/voice-reply.txt
+$MINICLAW_HOME/workspace/voice-reply.txt
 ```
 
 Writing to a file avoids shell-escaping problems with quotes, newlines, and long text.
 
-Then generate the audio with edge-tts and convert it to OGG/Opus with ffmpeg. The voice `en-US-AndrewMultilingualNeural` is multilingual and speaks both English and Spanish naturally, so the same voice is used regardless of language. edge-tts outputs MP3 regardless of the file extension, and Telegram voice notes require OGG/Opus, so the ffmpeg conversion is required:
+Next, pick the voice. Each instance defines its own per-language voices in `$MINICLAW_HOME/data/voices.json`, e.g.:
+
+```json
+{ "en": "en-US-AndrewNeural", "es": "es-ES-AlvaroNeural" }
+```
+
+Read that file (use the Read tool), then choose the value matching the language you are replying in: `en` for an English reply, `es` for a Spanish reply. Use that string as `<VOICE>` below.
+
+Then generate the audio with edge-tts and convert it to OGG/Opus with ffmpeg. edge-tts outputs MP3 regardless of the file extension, and Telegram voice notes require OGG/Opus, so the ffmpeg conversion is required:
 
 ```bash
 /home/openclaw/.local/bin/edge-tts \
-  --voice en-US-AndrewMultilingualNeural \
-  --file /home/openclaw/.miniclaw-tim/workspace/voice-reply.txt \
-  --write-media /home/openclaw/.miniclaw-tim/workspace/voice-reply.mp3
+  --voice <VOICE> \
+  --file "$MINICLAW_HOME/workspace/voice-reply.txt" \
+  --write-media "$MINICLAW_HOME/workspace/voice-reply.mp3"
 
 ffmpeg -y -loglevel error \
-  -i /home/openclaw/.miniclaw-tim/workspace/voice-reply.mp3 \
+  -i "$MINICLAW_HOME/workspace/voice-reply.mp3" \
   -c:a libopus -b:a 32k -ar 48000 \
-  /home/openclaw/.miniclaw-tim/workspace/voice-reply.ogg
+  "$MINICLAW_HOME/workspace/voice-reply.ogg"
 ```
 
 ## Step 5: Queue the voice note in the outbox
 
-Write the outbox to `/home/openclaw/.miniclaw-tim/outbox.json` with an EMPTY caption:
+Write the outbox to `$MINICLAW_HOME/outbox.json` with an EMPTY caption. Use the absolute path to the OGG (expand `$MINICLAW_HOME` to its real value):
 
 ```json
 [
   {
-    "path": "/home/openclaw/.miniclaw-tim/workspace/voice-reply.ogg",
+    "path": "$MINICLAW_HOME/workspace/voice-reply.ogg",
     "type": "voice",
     "caption": ""
   }
@@ -82,3 +92,4 @@ Output your full response text as your normal reply. miniclaw sends it as a sepa
 - Keep the spoken voice reply natural and reasonably concise; the text message can be fuller
 - edge-tts is NOT on PATH, so always call it by its full path `/home/openclaw/.local/bin/edge-tts`
 - If edge-tts or ffmpeg fails, send text only and mention the voice note is unavailable
+- If `$MINICLAW_HOME/data/voices.json` is missing, fall back to `en-US-AndrewNeural` for English and `es-ES-AlvaroNeural` for Spanish, and mention it
